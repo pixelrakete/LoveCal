@@ -4,7 +4,6 @@ data class DateWish(
     val id: String = "",
     val title: String = "",
     val description: String = "",
-    val location: String? = null,
-    val budget: Double? = null,
-    val createdBy: String = ""
+    val createdBy: String = "",
+    val createdAt: Long = System.currentTimeMillis()
 ) 

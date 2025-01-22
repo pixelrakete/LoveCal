@@ -2,7 +2,6 @@ package com.pixelrakete.lovecal.ui.calendar
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -13,184 +12,170 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.common.api.Scope
-import com.google.api.services.calendar.CalendarScopes
+import com.pixelrakete.lovecal.R
+import com.pixelrakete.lovecal.ui.components.ErrorView
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarSelectionScreen(
-    onCalendarSelected: (Long) -> Unit,
-    onNavigateToLogin: () -> Unit,
-    viewModel: CalendarSelectionViewModel = hiltViewModel()
+    viewModel: CalendarSelectionViewModel,
+    onNavigateToHome: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
 
-    // Handle successful calendar selection
-    LaunchedEffect(uiState.success, uiState.calendarId) {
-        if (uiState.success && uiState.calendarId != -1L) {
-            try {
-                // Set loading to false before navigation
-                viewModel.setLoading(false)
-                onCalendarSelected(uiState.calendarId)
-            } catch (e: Exception) {
-                Log.e("CalendarSelection", "Error during calendar selection", e)
-                viewModel.resetSuccess()
-            }
-        }
-    }
-
-    // Check if we need to navigate to login
-    LaunchedEffect(uiState.shouldNavigateToLogin) {
-        if (uiState.shouldNavigateToLogin) {
-            // Set loading to false before navigation
-            viewModel.setLoading(false)
-            onNavigateToLogin()
-            viewModel.resetNavigation()
-        }
-    }
-
-    // Permission launcher setup
+    // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        Log.d("CalendarSelection", "Permissions result: $permissions")
         val allGranted = permissions.all { it.value }
         if (allGranted) {
-            Log.d("CalendarSelection", "All permissions granted, checking Google Calendar auth")
-            checkGoogleCalendarAuthAndLoad(context, viewModel)
+            viewModel.loadCalendars()
         } else {
-            Log.d("CalendarSelection", "Some permissions denied")
-            viewModel.navigateToLogin()
+            viewModel.setError("Calendar permissions are required to continue")
         }
     }
 
-    // Check calendar permissions and load calendars if we have them
+    // Check permissions on first launch
     LaunchedEffect(Unit) {
-        Log.d("CalendarSelection", "Initial permission check")
-        val readPermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.READ_CALENDAR
-        )
-        val writePermission = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.WRITE_CALENDAR
-        )
-        val hasPermissions = readPermission == PackageManager.PERMISSION_GRANTED &&
-                writePermission == PackageManager.PERMISSION_GRANTED
+        val readPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR)
+        val writePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_CALENDAR)
         
-        Log.d("CalendarSelection", "Has permissions: $hasPermissions (read: ${readPermission == PackageManager.PERMISSION_GRANTED}, write: ${writePermission == PackageManager.PERMISSION_GRANTED})")
-        
-        if (!hasPermissions) {
-            Log.d("CalendarSelection", "Requesting permissions")
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.READ_CALENDAR,
-                    Manifest.permission.WRITE_CALENDAR
-                )
-            )
+        if (readPermission != PackageManager.PERMISSION_GRANTED || writePermission != PackageManager.PERMISSION_GRANTED) {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.READ_CALENDAR,
+                Manifest.permission.WRITE_CALENDAR
+            ))
         } else {
-            Log.d("CalendarSelection", "All permissions granted, checking Google Calendar auth")
-            checkGoogleCalendarAuthAndLoad(context, viewModel)
+            viewModel.loadCalendars()
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Select Calendar",
-            style = MaterialTheme.typography.headlineMedium
-        )
+    LaunchedEffect(uiState.selectedCalendarId) {
+        if (uiState.selectedCalendarId != null && uiState.calendarPermissionGranted) {
+            onNavigateToHome()
+        }
+    }
 
-        Text(
-            text = "Choose an existing calendar or create a new one for your date plans.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center
+    if (uiState.showSharingConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSharingConfirmation,
+            title = { Text("Share Calendar") },
+            text = {
+                Column {
+                    Text("Do you want to share this calendar with your future partner?")
+                    Text(
+                        text = "They will be able to view and edit events in this calendar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmCalendarSelection) {
+                    Text("Share")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSharingConfirmation) {
+                    Text("Cancel")
+                }
+            }
         )
+    }
 
-        if (uiState.error != null) {
-            Text(
-                text = uiState.error ?: "",
-                color = MaterialTheme.colorScheme.error,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.select_calendar)) }
             )
         }
-
-        if (!uiState.success) {  // Only show content when not in success state
-            if (uiState.availableCalendars.isEmpty()) {
-                Text(
-                    text = if (uiState.isLoading) "Loading calendars..." else "No calendars found",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+    ) { padding ->
+        Box(modifier = modifier.padding(padding)) {
+            if (uiState.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center)
                 )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.availableCalendars) { calendar ->
-                        ElevatedCard(
-                            onClick = { 
-                                if (!uiState.isLoading) {
-                                    viewModel.selectCalendar(calendar.id)
-                                }
-                            },
+            }
+
+            uiState.error?.let { error ->
+                AlertDialog(
+                    onDismissRequest = viewModel::clearError,
+                    title = { Text("Error") },
+                    text = { Text(error) },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::clearError) {
+                            Text(stringResource(R.string.ok))
+                        }
+                    }
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (uiState.isPartner2 && uiState.sharedCalendar != null) {
+                    item {
+                        val sharedCalendar = uiState.sharedCalendar
+                        Card(
                             modifier = Modifier.fillMaxWidth(),
-                            enabled = !uiState.isLoading
+                            onClick = { 
+                                sharedCalendar?.let { calendar ->
+                                    viewModel.initiateCalendarSelection(calendar)
+                                }
+                            }
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(16.dp)
                             ) {
                                 Text(
-                                    text = calendar.name,
-                                    color = if (uiState.isLoading) 
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                    else 
-                                        MaterialTheme.colorScheme.onSurface
+                                    text = "Shared Couple Calendar",
+                                    style = MaterialTheme.typography.titleMedium
                                 )
+                                Text(
+                                    text = "Calendar shared by your partner",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                } else if (!uiState.isPartner2) {
+                    items(uiState.calendars) { calendar ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { viewModel.initiateCalendarSelection(calendar) }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp)
+                            ) {
+                                Text(
+                                    text = calendar.title,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                if (calendar.isReadOnly) {
+                                    Text(
+                                        text = "Read Only",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
-
-            Button(
-                onClick = { viewModel.createCalendar() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !uiState.isLoading
-            ) {
-                Text(if (uiState.isLoading) "Loading..." else "Create New Calendar")
-            }
         }
-    }
-}
-
-private fun checkGoogleCalendarAuthAndLoad(
-    context: android.content.Context,
-    viewModel: CalendarSelectionViewModel
-) {
-    Log.d("CalendarSelection", "Checking Google Calendar authentication")
-    val account = GoogleSignIn.getLastSignedInAccount(context)
-    if (account == null || !account.grantedScopes.any { it.scopeUri == CalendarScopes.CALENDAR }) {
-        Log.d("CalendarSelection", "No Google Calendar authentication, navigating to login")
-        viewModel.navigateToLogin()
-    } else {
-        Log.d("CalendarSelection", "Google Calendar authentication present, loading calendars")
-        viewModel.loadCalendars()
     }
 } 

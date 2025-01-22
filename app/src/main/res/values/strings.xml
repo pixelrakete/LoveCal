@@ -1,13 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LoveCal</string>
-    <string name="plan_date">Plan a Date</string>
+    
+    <!-- Google Play Services -->
+    <string name="app_id">@string/default_web_client_id</string>
+    
+    <!-- Common -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
     <string name="title">Title</string>
     <string name="description">Description</string>
-    <string name="location">Location</string>
-    <string name="budget">Budget</string>
-    <string name="surprise_date">Make it a surprise date</string>
-    <string name="get_random_wish">Get Random Wish from Partner</string>
-    <string name="save">Save</string>
-    <string name="error">Error</string>
+    <string name="completed">Completed</string>
+    <string name="back">Back</string>
+    <string name="retry">Retry</string>
     <string name="ok">OK</string>
+    
+    <!-- Login -->
+    <string name="login_title">Welcome to LoveCal</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="login">Login</string>
+    <string name="join">Join</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    
+    <!-- Home -->
+    <string name="settings">Settings</string>
+    <string name="add">Add</string>
+    <string name="upcoming_dates">Upcoming Dates</string>
+    <string name="next_date">Next Date</string>
+    <string name="time_until_date">Time until date</string>
+    <string name="invitation_code">Invitation Code</string>
+    <string name="budget_overview">Budget Overview</string>
+    <string name="monthly_budget">Monthly Budget</string>
+    <string name="spent_budget">Spent Budget</string>
+    <string name="remaining_budget">Remaining Budget</string>
+    <string name="budget_amount">%1$s</string>
+    <string name="surprise_date">Surprise Date</string>
+    
+    <!-- Plan Date -->
+    <string name="plan_date_budget">Budget</string>
+    <string name="plan_date_date">Date</string>
+    <string name="plan_date_time">Time</string>
+    
+    <!-- Calendar -->
+    <string name="select_calendar">Select Calendar</string>
+    
+    <!-- Settings -->
+    <string name="notification_settings">Notification Settings</string>
+    <string name="enable_notifications">Enable Notifications</string>
+    <string name="sign_out">Sign Out</string>
+    
+    <!-- Date Wishes -->
+    <string name="date_wishes">Date Wishes</string>
+    <string name="add_wish">Add Wish</string>
+    <string name="title_required">Title is required</string>
+    <string name="description_required">Description is required</string>
+    <string name="complete_wish">Complete Wish</string>
+    <string name="delete_wish">Delete Wish</string>
 </resources>

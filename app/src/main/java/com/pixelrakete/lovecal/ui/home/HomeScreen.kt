@@ -1,42 +1,118 @@
 package com.pixelrakete.lovecal.ui.home
 
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import com.pixelrakete.lovecal.ui.components.*
+import com.pixelrakete.lovecal.R
+import com.pixelrakete.lovecal.data.model.DatePlan
+import com.pixelrakete.lovecal.ui.components.InvitationCard
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
+
+@Composable
+private fun DateCountdown(
+    datePlan: DatePlan,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Next Date Coming Up!",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = datePlan.title ?: "Untitled Date",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            datePlan.dateTimeStr?.let { dateStr ->
+                Text(
+                    text = dateStr,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToDateDetails: (String) -> Unit,
-    onNavigateToDateCreation: () -> Unit,
+    uiState: HomeUiState,
+    onNavigateToCreateDatePlan: () -> Unit,
+    onNavigateToEditDatePlan: (String) -> Unit,
+    onDeleteDatePlan: (String) -> Unit,
+    onCompleteDatePlan: (String, Boolean) -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToDateWishes: () -> Unit,
-    viewModel: HomeViewModel = hiltViewModel()
+    modifier: Modifier = Modifier
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    // Find next upcoming date within a week
+    val nextDate = remember(uiState.datePlans) {
+        uiState.datePlans
+            .filter { !it.completed }
+            .firstOrNull { datePlan ->
+                datePlan.dateTimeStr?.let { dateStr ->
+                    try {
+                        val formatter = DateTimeFormatter.ofPattern("d.M.yyyy HH:mm")
+                        val dateTime = LocalDateTime.parse(dateStr, formatter)
+                        val now = LocalDateTime.now()
+                        val daysUntil = ChronoUnit.DAYS.between(now, dateTime)
+                        
+                        daysUntil in 0..7
+                    } catch (e: Exception) {
+                        Log.e("HomeScreen", "Error parsing date: $dateStr", e)
+                        false
+                    }
+                } ?: false
+            }
+    }
 
     Scaffold(
+        modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("LoveCal") },
-                actions = {
-                    IconButton(onClick = onNavigateToDateWishes) {
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = "Date Wishes"
+                            painter = painterResource(id = R.drawable.logo_lovecal),
+                            contentDescription = "LoveCal Logo",
+                            modifier = Modifier.size(40.dp),
+                            tint = Color.Unspecified
+                        )
+                        Text(
+                            text = "LoveCal",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
+                },
+                actions = {
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -48,14 +124,12 @@ fun HomeScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onNavigateToDateCreation,
-                containerColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(16.dp)
+                onClick = onNavigateToCreateDatePlan,
+                containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Create date",
-                    tint = MaterialTheme.colorScheme.onPrimary
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Create new date plan"
                 )
             }
         }
@@ -63,52 +137,92 @@ fun HomeScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(padding)
         ) {
-            // Quote Card
+            // Quote tile
             item {
-                QuoteCard(
-                    quote = uiState.quote,
-                    isLoading = uiState.isLoading,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-            }
-
-            // Countdown Card
-            if (uiState.nextDate != null) {
-                item {
-                    CountdownCard(
-                        nextDate = uiState.nextDate!!,
-                        daysUntil = uiState.daysUntilNextDate,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Text(
+                            text = uiState.quote ?: "Love is in the air",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Text(
+                            text = "- ${uiState.quoteAuthor ?: "Unknown"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
+            // Countdown tile for upcoming date
+            item {
+                nextDate?.let { datePlan ->
+                    DateCountdown(
+                        datePlan = datePlan,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    )
+                }
+            }
+            
             // Invitation Card
-            if (uiState.invitationCode != null) {
+            if (uiState.invitationCode != null && uiState.partner2Id.isNullOrEmpty()) {
                 item {
                     InvitationCard(
-                        code = uiState.invitationCode!!,
-                        onShareClick = { /* TODO: Implement share functionality */ },
-                        modifier = Modifier.padding(horizontal = 16.dp)
+                        code = uiState.invitationCode,
+                        onShareClick = {},
+                        modifier = Modifier.padding(16.dp)
                     )
                 }
             }
-
-            // Budget Chart
+            
+            // Budget tile
             item {
-                BudgetContent(
-                    monthlyBudget = uiState.monthlyBudget,
-                    remainingBudget = uiState.remainingBudget,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    BudgetDisplay(
+                        monthlyBudget = uiState.monthlyBudget,
+                        remainingBudget = uiState.remainingBudget
+                    )
+                }
             }
-
-            // Upcoming Dates
+            
+            // Date plans section
             item {
                 Text(
                     text = "Upcoming Dates",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(h
+                    style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            
+            // Date plan items
+            items(uiState.datePlans) { datePlan ->
+                DatePlanItem(
+                    datePlan = datePlan,
+                    plannerColor = Color(android.graphics.Color.parseColor(uiState.plannerColor)),
+                    isPlanner = uiState.isPlanner,
+                    onEditClick = { onNavigateToEditDatePlan(datePlan.id) },
+                    onDeleteClick = { onDeleteDatePlan(datePlan.id) },
+                    onCompletedChange = { completed -> onCompleteDatePlan(datePlan.id, completed) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+    }
+} 

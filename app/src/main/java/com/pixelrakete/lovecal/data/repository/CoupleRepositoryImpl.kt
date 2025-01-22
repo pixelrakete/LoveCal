@@ -2,224 +2,123 @@ package com.pixelrakete.lovecal.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.pixelrakete.lovecal.data.model.Couple
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.channels.awaitClose
+import com.pixelrakete.lovecal.util.ValidationUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
-import java.util.*
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import android.content.SharedPreferences
+import javax.inject.Singleton
+import java.util.Date
 
+@Singleton
 class CoupleRepositoryImpl @Inject constructor(
-    private val auth: FirebaseAuth,
     private val firestore: FirebaseFirestore,
-    private val prefs: SharedPreferences
+    private val auth: FirebaseAuth
 ) : CoupleRepository {
 
-    companion object {
-        private const val COUPLES_COLLECTION = "couples"
-        private const val TEMP_CALENDAR_ID_KEY = "temp_calendar_id"
-    }
-
-    private val couplesCollection = firestore.collection("couples")
-
-    private fun generateInvitationCode(): String {
-        val allowedChars = ('A'..'Z') + ('0'..'9')
-        return (1..6).map { allowedChars.random() }.joinToString("")
-    }
-
-    override fun observeCurrentCouple(): Flow<Couple?> = callbackFlow {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        
-        val listener = couplesCollection
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) {
-                    return@addSnapshotListener
-                }
-
-                val couple = snapshot?.documents
-                    ?.mapNotNull { it.toObject(Couple::class.java)?.copy(id = it.id) }
-                    ?.firstOrNull { it.partner1Id == userId || it.partner2Id == userId }
-                
-                trySend(couple)
-            }
-
-        awaitClose {
-            listener.remove()
-        }
-    }
-
-    override suspend fun getCurrentCouple(): Couple? {
-        val userId = auth.currentUser?.uid ?: return null
-        return try {
-            val snapshot = couplesCollection
-                .whereEqualTo("partner1Id", userId)
+    override suspend fun getCouple(coupleId: String): Couple? = withContext(Dispatchers.IO) {
+        try {
+            val doc = firestore.collection("couples")
+                .document(coupleId)
                 .get()
                 .await()
             
-            var couple = snapshot.documents.firstOrNull()?.toObject(Couple::class.java)
-            if (couple != null) {
-                couple = couple.copy(id = snapshot.documents.first().id)
-                return couple
+            if (doc.exists()) {
+                doc.toObject(Couple::class.java)?.copy(id = doc.id)
+            } else {
+                null
             }
-
-            val snapshot2 = couplesCollection
-                .whereEqualTo("partner2Id", userId)
-                .get()
-                .await()
-            
-            couple = snapshot2.documents.firstOrNull()?.toObject(Couple::class.java)
-            if (couple != null) {
-                couple = couple.copy(id = snapshot2.documents.first().id)
-            }
-            couple
         } catch (e: Exception) {
-            null
+            throw handleError(e)
         }
     }
 
-    override suspend fun createCouple(
-        partner1Name: String,
-        partner1Color: String,
-        monthlyBudget: Double,
-        city: String
-    ): Couple {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        val invitationCode = generateInvitationCode()
-        
-        val couple = Couple(
-            partner1Id = userId,
-            partner1Name = partner1Name,
-            partner1Color = partner1Color,
-            monthlyBudget = monthlyBudget,
-            city = city,
-            invitationCode = invitationCode,
-            setupComplete = false
-        )
-        
-        val docRef = couplesCollection.add(couple).await()
-        return couple.copy(id = docRef.id)
-    }
-
-    override suspend fun updateCouple(couple: Couple) {
-        couplesCollection.document(couple.id).set(couple).await()
-    }
-
-    override suspend fun updateCouple(
-        partner1Name: String,
-        partner2Name: String,
-        partner1Color: String,
-        partner2Color: String,
-        partner1Interests: List<String>,
-        partner2Interests: List<String>,
-        monthlyBudget: Double,
-        city: String
-    ) {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        val currentCouple = getCurrentCouple() ?: throw IllegalStateException("No couple found")
-
-        val updatedCouple = currentCouple.copy(
-            partner1Name = partner1Name,
-            partner2Name = partner2Name,
-            partner1Color = partner1Color,
-            partner2Color = partner2Color,
-            partner1Interests = partner1Interests,
-            partner2Interests = partner2Interests,
-            monthlyBudget = monthlyBudget,
-            city = city,
-            setupComplete = currentCouple.setupComplete
-        )
-
-        couplesCollection.document(currentCouple.id).set(updatedCouple).await()
-    }
-
-    override suspend fun acceptInvitation(invitationCode: String) {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        
-        val snapshot = couplesCollection
-            .whereEqualTo("invitationCode", invitationCode)
-            .get()
-            .await()
-        
-        val couple = snapshot.documents.firstOrNull()?.toObject(Couple::class.java)
-            ?: throw IllegalStateException("Invalid invitation code")
-        
-        if (couple.partner2Id != null) {
-            throw IllegalStateException("This couple already has a partner")
+    override suspend fun updateCouple(couple: Couple): Unit = withContext(Dispatchers.IO) {
+        try {
+            val userId = auth.currentUser?.uid ?: throw IllegalStateException("No user ID available")
+            
+            // Verify user is part of the couple
+            val existingCouple = getCouple(couple.id) ?: throw IllegalStateException("Couple not found")
+            if (existingCouple.partner1Id != userId && existingCouple.partner2Id != userId) {
+                throw IllegalStateException("User not authorized to update this couple")
+            }
+            
+            val updates = mapOf(
+                "partner1Name" to couple.partner1Name,
+                "partner1Color" to couple.partner1Color,
+                "partner1Interests" to couple.partner1Interests,
+                "partner2Name" to couple.partner2Name,
+                "partner2Color" to couple.partner2Color,
+                "partner2Interests" to couple.partner2Interests,
+                "monthlyBudget" to couple.monthlyBudget,
+                "dateFrequencyWeeks" to couple.dateFrequencyWeeks,
+                "city" to couple.city,
+                "updatedAt" to Date()
+            )
+            
+            firestore.collection("couples")
+                .document(couple.id)
+                .update(updates)
+                .await()
+        } catch (e: Exception) {
+            throw handleError(e)
         }
-        
-        couplesCollection.document(snapshot.documents.first().id)
-            .update("partner2Id", userId)
-            .await()
     }
 
-    override suspend fun validateInvitationCode(invitationCode: String): Boolean {
-        val snapshot = couplesCollection
-            .whereEqualTo("invitationCode", invitationCode)
-            .get()
-            .await()
-        
-        val couple = snapshot.documents.firstOrNull()?.toObject(Couple::class.java)
-        
-        return couple != null && couple.partner2Id == null
-    }
-
-    override suspend fun completePartner2Setup(
-        invitationCode: String,
-        partner2Name: String,
-        partner2Color: String,
-        partner2Interests: List<String>
-    ) {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        
-        val snapshot = couplesCollection
-            .whereEqualTo("invitationCode", invitationCode)
-            .get()
-            .await()
-        
-        val couple = snapshot.documents.firstOrNull()?.toObject(Couple::class.java)
-            ?: throw IllegalStateException("Invalid invitation code")
-        
-        if (couple.partner2Id != null) {
-            throw IllegalStateException("This couple already has a partner")
+    override suspend fun createCouple(couple: Couple): String = withContext(Dispatchers.IO) {
+        try {
+            // Generate a unique invitation code
+            var invitationCode: String
+            var isCodeUnique = false
+            do {
+                invitationCode = ValidationUtils.generateInvitationCode()
+                val existingCouple = firestore.collection("couples")
+                    .whereEqualTo("invitationCode", invitationCode)
+                    .get()
+                    .await()
+                    .documents
+                    .firstOrNull()
+                isCodeUnique = existingCouple == null
+            } while (!isCodeUnique)
+            
+            val coupleWithCode = couple.copy(invitationCode = invitationCode)
+            val docRef = firestore.collection("couples")
+                .add(coupleWithCode)
+                .await()
+            
+            docRef.id
+        } catch (e: Exception) {
+            throw handleError(e)
         }
-        
-        couplesCollection.document(snapshot.documents.first().id)
-            .update(mapOf(
-                "partner2Id" to userId,
-                "partner2Name" to partner2Name,
-                "partner2Color" to partner2Color,
-                "partner2Interests" to partner2Interests
-            ))
-            .await()
-    }
-    
-    override suspend fun setupCalendar(calendarId: String, isPartner1: Boolean) {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        val couple = getCurrentCouple() ?: throw IllegalStateException("No couple found")
-        
-        val field = if (isPartner1) "partner1CalendarId" else "partner2CalendarId"
-        
-        couplesCollection.document(couple.id)
-            .update(field, calendarId)
-            .await()
-    }
-    
-    override suspend fun markSetupComplete() {
-        val userId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
-        val couple = getCurrentCouple() ?: throw IllegalStateException("No couple found")
-        
-        couplesCollection.document(couple.id)
-            .update("setupComplete", true)
-            .await()
     }
 
-    override suspend fun storeTemporaryCalendarId(calendarId: String) {
-        prefs.edit().putString(TEMP_CALENDAR_ID_KEY, calendarId).apply()
-    }
+    override fun observeCouple(coupleId: String): Flow<Couple?> = flow {
+        try {
+            val snapshot = firestore.collection("couples")
+                .document(coupleId)
+                .get()
+                .await()
+            
+            emit(
+                if (snapshot.exists()) {
+                    snapshot.toObject(Couple::class.java)?.copy(id = snapshot.id)
+                } else {
+                    null
+                }
+            )
+        } catch (e: Exception) {
+            throw handleError(e)
+        }
+    }.flowOn(Dispatchers.IO)
 
-    override suspend fun getTemporaryCalendarId(): String? {
-        return prefs.getString(TEMP_CALENDAR_ID_KEY, null)
+    private fun handleError(e: Exception): Exception = when (e) {
+        is FirebaseFirestoreException -> IllegalStateException("Failed to access Firestore: ${e.message}")
+        is IllegalStateException -> e
+        else -> IllegalStateException("Couple error: ${e.message}")
     }
 } 

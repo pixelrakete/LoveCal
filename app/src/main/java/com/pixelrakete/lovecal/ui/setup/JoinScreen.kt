@@ -5,54 +5,58 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.pixelrakete.lovecal.R
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JoinScreen(
-    onNavigateToSetup: (String) -> Unit,
-    onNavigateBack: () -> Unit,
-    viewModel: JoinViewModel = hiltViewModel()
+    onNavigateToPartner2Setup: () -> Unit,
+    onNavigateBack: () -> Unit
 ) {
-    var code by remember { mutableStateOf("") }
+    var invitationCode by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Join a Couple") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        OutlinedTextField(
+            value = invitationCode,
+            onValueChange = { invitationCode = it },
+            label = { Text(stringResource(R.string.invitation_code)) },
+            isError = error != null,
+            supportingText = error?.let { { Text(it) } },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = {
+                if (invitationCode.isBlank()) {
+                    error = "Please enter an invitation code"
+                } else {
+                    error = null
+                    onNavigateToPartner2Setup()
                 }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            },
+            modifier = Modifier.fillMaxWidth()
         ) {
-            OutlinedTextField(
-                value = code,
-                onValueChange = { code = it },
-                label = { Text("Invitation Code") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text(stringResource(R.string.join))
+        }
 
-            Button(
-                onClick = { onNavigateToSetup(code) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = code.isNotBlank()
-            ) {
-                Text("Join")
-            }
+        TextButton(
+            onClick = onNavigateBack,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.back))
         }
     }
 } 

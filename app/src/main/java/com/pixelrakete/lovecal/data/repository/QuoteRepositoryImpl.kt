@@ -1,140 +1,97 @@
 package com.pixelrakete.lovecal.data.repository
 
-import android.util.Log
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.pixelrakete.lovecal.data.manager.UserManager
 import com.pixelrakete.lovecal.data.model.Quote
-import com.pixelrakete.lovecal.data.services.QuoteService
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
-import java.util.UUID
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.time.LocalDate
+import java.util.Random
 
 @Singleton
 class QuoteRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth,
-    private val quoteService: QuoteService
+    private val userManager: UserManager
 ) : QuoteRepository {
-    private val quotesCollection = firestore.collection("quotes")
 
     override suspend fun getRandomQuote(): Quote? {
-        if (auth.currentUser == null) {
-            Log.e("QuoteRepository", "User not authenticated")
-            return null
-        }
-
-        return try {
-            // Try to get a random quote from Firestore first
-            val randomQuote = try {
-                quotesCollection
-                    .limit(1)
-                    .get()
-                    .await()
-                    .documents
-                    .firstOrNull()
-                    ?.toObject(Quote::class.java)
-                    ?.let { quote ->
-                        if (quote.author.isBlank()) quote.copy(author = "Unbekannt") else quote
-                    }
-            } catch (e: Exception) {
-                Log.e("QuoteRepository", "Error getting random quote from Firestore", e)
-                null
-            }
-
-            // If no quote is found or there's an error, generate a new one
-            if (randomQuote == null) {
-                val newQuote = quoteService.generateLoveQuote().let { quote ->
-                    quote.copy(author = if (quote.author.isBlank()) "Unbekannt" else quote.author)
-                }
-                if (newQuote.text.isNotBlank()) {
-                    val saved = saveQuote(newQuote)
-                    if (saved) {
-                        Log.d("QuoteRepository", "Successfully saved new quote to Firebase")
-                    } else {
-                        Log.w("QuoteRepository", "Failed to save quote to Firebase")
-                    }
-                    newQuote
-                } else {
-                    null
-                }
-            } else {
-                randomQuote
-            }
+        try {
+            val quotes = getAllQuotes()
+            return quotes.randomOrNull()
         } catch (e: Exception) {
-            Log.e("QuoteRepository", "Error in getRandomQuote", e)
-            // If all else fails, generate a quote without saving
-            quoteService.generateLoveQuote().let { quote ->
-                quote.copy(author = if (quote.author.isBlank()) "Unbekannt" else quote.author)
-            }
-        }
-    }
-
-    override suspend fun saveQuote(quote: Quote): Boolean {
-        if (auth.currentUser == null) {
-            Log.e("QuoteRepository", "User not authenticated")
-            return false
-        }
-
-        return try {
-            val quoteId = quote.id.ifBlank { UUID.randomUUID().toString() }
-            val quoteWithId = quote.copy(
-                id = quoteId,
-                author = if (quote.author.isBlank()) "Unbekannt" else quote.author
-            )
-            quotesCollection.document(quoteId).set(quoteWithId).await()
-            true
-        } catch (e: Exception) {
-            Log.e("QuoteRepository", "Error saving quote", e)
-            false
-        }
-    }
-
-    override suspend fun getQuoteById(id: String): Quote? {
-        if (auth.currentUser == null) {
-            Log.e("QuoteRepository", "User not authenticated")
-            return null
-        }
-
-        return try {
-            val document = quotesCollection.document(id).get().await()
-            document.toObject(Quote::class.java)?.let { quote ->
-                if (quote.author.isBlank()) quote.copy(author = "Unbekannt") else quote
-            }
-        } catch (e: Exception) {
-            Log.e("QuoteRepository", "Error getting quote by id", e)
-            null
-        }
-    }
-
-    override suspend fun getAllQuotes(): List<Quote> {
-        if (auth.currentUser == null) {
-            Log.e("QuoteRepository", "User not authenticated")
-            return emptyList()
-        }
-
-        return try {
-            quotesCollection.get().await().toObjects(Quote::class.java)
-                .map { quote ->
-                    if (quote.author.isBlank()) quote.copy(author = "Unbekannt") else quote
-                }
-        } catch (e: Exception) {
-            Log.e("QuoteRepository", "Error getting all quotes", e)
-            emptyList()
+            throw handleError(e)
         }
     }
 
     override suspend fun getQuoteOfTheDay(): Quote? {
-        if (auth.currentUser == null) {
-            Log.e("QuoteRepository", "User not authenticated")
-            return null
-        }
-
-        return try {
-            getRandomQuote()
+        try {
+            val quotes = getAllQuotes()
+            val today = LocalDate.now()
+            val seed = today.toEpochDay()
+            val random = Random(seed)
+            return quotes.getOrNull(random.nextInt(quotes.size))
         } catch (e: Exception) {
-            Log.e("QuoteRepository", "Error getting quote of the day", e)
-            null
+            throw handleError(e)
         }
+    }
+
+    override suspend fun getAllQuotes(): List<Quote> = withContext(Dispatchers.IO) {
+        try {
+            val userId = userManager.getCurrentUserId() ?: throw IllegalStateException("No user ID available")
+            val snapshot = firestore.collection("quotes")
+                .whereEqualTo("createdBy", userId)
+                .get()
+                .await()
+
+            snapshot.documents.mapNotNull { doc ->
+                doc.toObject(Quote::class.java)?.copy(id = doc.id)
+            }
+        } catch (e: Exception) {
+            throw handleError(e)
+        }
+    }
+
+    override suspend fun getQuoteById(quoteId: String): Quote? = withContext(Dispatchers.IO) {
+        try {
+            val doc = firestore.collection("quotes")
+                .document(quoteId)
+                .get()
+                .await()
+            
+            doc.toObject(Quote::class.java)?.copy(id = doc.id)
+        } catch (e: Exception) {
+            throw handleError(e)
+        }
+    }
+
+    override suspend fun saveQuote(quote: Quote): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val userId = userManager.getCurrentUserId() ?: throw IllegalStateException("No user ID available")
+            val quoteWithUser = quote.copy(createdBy = userId)
+            
+            if (quote.id.isBlank()) {
+                firestore.collection("quotes")
+                    .add(quoteWithUser)
+                    .await()
+            } else {
+                firestore.collection("quotes")
+                    .document(quote.id)
+                    .set(quoteWithUser)
+                    .await()
+            }
+            true
+        } catch (e: Exception) {
+            throw handleError(e)
+        }
+    }
+
+    private fun handleError(e: Exception): Exception = when (e) {
+        is FirebaseFirestoreException -> IllegalStateException("Failed to access Firestore: ${e.message}")
+        is IllegalStateException -> e
+        else -> IllegalStateException("Quote error: ${e.message}")
     }
 } 

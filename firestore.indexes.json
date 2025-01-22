@@ -1,19 +1,64 @@
 {
   "indexes": [
     {
-      "collectionGroup": "dates",
+      "collectionGroup": "couples",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "coupleId",
+          "fieldPath": "partner1Id",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "startDateTime",
+          "fieldPath": "setupComplete",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "couples",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "partner2Id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "setupComplete",
           "order": "ASCENDING"
         }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "couples",
+      "fieldPath": "partner1Id",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "couples",
+      "fieldPath": "partner2Id",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "couples",
+      "fieldPath": "setupComplete",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    }
+  ]
 }

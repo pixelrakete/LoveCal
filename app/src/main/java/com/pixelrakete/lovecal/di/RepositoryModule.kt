@@ -12,12 +12,6 @@ import javax.inject.Singleton
 abstract class RepositoryModule {
     @Binds
     @Singleton
-    abstract fun bindAuthRepository(
-        authRepositoryImpl: AuthRepositoryImpl
-    ): AuthRepository
-
-    @Binds
-    @Singleton
     abstract fun bindDatePlanRepository(
         datePlanRepositoryImpl: DatePlanRepositoryImpl
     ): DatePlanRepository
@@ -57,4 +51,10 @@ abstract class RepositoryModule {
     abstract fun bindCoupleSettingsRepository(
         coupleSettingsRepositoryImpl: CoupleSettingsRepositoryImpl
     ): CoupleSettingsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindUserRepository(
+        userRepositoryImpl: UserRepositoryImpl
+    ): UserRepository
 } 

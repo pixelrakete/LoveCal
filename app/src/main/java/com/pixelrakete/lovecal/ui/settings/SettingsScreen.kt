@@ -1,58 +1,44 @@
 package com.pixelrakete.lovecal.ui.settings
 
-import android.content.Context
-import android.widget.Toast
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.pixelrakete.lovecal.ui.components.ColorPickerDialog
-import com.pixelrakete.lovecal.ui.components.InterestChips
-import androidx.compose.foundation.layout.Arrangement.Absolute.spacedBy
-import androidx.compose.foundation.text.KeyboardOptions
+import com.pixelrakete.lovecal.ui.components.ColorPicker
+import com.pixelrakete.lovecal.ui.components.InterestPicker
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
-    isInitialSetup: Boolean = false,
+    onNavigateToLogin: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showColorPicker1 by remember { mutableStateOf(false) }
-    var showColorPicker2 by remember { mutableStateOf(false) }
-    val context = LocalContext.current
 
-    LaunchedEffect(isInitialSetup) {
-        if (isInitialSetup) {
-            viewModel.setInitialSetup()
-        }
-    }
-
-    LaunchedEffect(uiState.success) {
-        if (uiState.success) {
-            onNavigateBack()
+    LaunchedEffect(uiState.isSuccess) {
+        if (uiState.isSuccess) {
+            if (uiState.shouldNavigateToLogin) {
+                onNavigateToLogin()
+            } else {
+                onNavigateBack()
+            }
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isInitialSetup) "Setup Profile" else "Settings") },
+                title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -61,183 +47,329 @@ fun SettingsScreen(
             )
         }
     ) { padding ->
-        if (uiState.isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Setting up your profile...",
-                    style = MaterialTheme.typography.bodyLarge
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            if (uiState.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center)
                 )
             }
-        } else {
-            LazyColumn(
+
+            uiState.error?.let { errorMessage ->
+                AlertDialog(
+                    onDismissRequest = viewModel::clearError,
+                    title = { Text("Error") },
+                    text = { Text(errorMessage) },
+                    confirmButton = {
+                        TextButton(onClick = viewModel::clearError) {
+                            Text("OK")
+                        }
+                    }
+                )
+            }
+
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Partner 1 Settings
-                item {
-                    Text(
-                        text = if (isInitialSetup) "Your Details" else "Your Settings",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                }
+                // Partner 1 Section
+                Text(
+                    text = "Partner 1 Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
 
-                item {
-                    OutlinedTextField(
-                        value = uiState.partner1Name,
-                        onValueChange = { viewModel.updatePartner1Name(it) },
-                        label = { Text("Your Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = uiState.partner1Name,
+                    onValueChange = { newName ->
+                        viewModel.updateSettings(
+                            partner1Name = newName,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
+                        )
+                    },
+                    label = { Text("Partner 1 Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Your Color")
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(android.graphics.Color.parseColor(uiState.partner1Color)))
-                                .clickable { showColorPicker1 = true }
+                ColorPicker(
+                    selectedColor = uiState.partner1Color,
+                    onColorSelected = { newColor ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = newColor,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
+                        )
+                    },
+                    title = "Partner 1 Color"
+                )
+
+                Text(
+                    text = "Partner 1 Interests",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                InterestPicker(
+                    selectedInterests = uiState.partner1Interests,
+                    onInterestsChanged = { newInterests ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = newInterests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
                         )
                     }
-                }
+                )
 
-                item {
-                    InterestChips(
-                        interests = uiState.partner1Interests,
-                        onInterestsChange = { viewModel.updatePartner1Interests(it) }
-                    )
-                }
+                // Partner 2 Section
+                Text(
+                    text = "Partner 2 Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                )
 
-                // Partner 2 Settings
-                item {
-                    Text(
-                        text = "Partner Settings",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                }
+                OutlinedTextField(
+                    value = uiState.partner2Name,
+                    onValueChange = { newName ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = newName,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
+                        )
+                    },
+                    label = { Text("Partner 2 Name") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                item {
-                    OutlinedTextField(
-                        value = uiState.partner2Name,
-                        onValueChange = { viewModel.updatePartner2Name(it) },
-                        label = { Text("Partner Name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                ColorPicker(
+                    selectedColor = uiState.partner2Color,
+                    onColorSelected = { newColor ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = newColor,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
+                        )
+                    },
+                    title = "Partner 2 Color"
+                )
 
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Partner Color")
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(android.graphics.Color.parseColor(uiState.partner2Color)))
-                                .clickable { showColorPicker2 = true }
+                Text(
+                    text = "Partner 2 Interests",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+
+                InterestPicker(
+                    selectedInterests = uiState.partner2Interests,
+                    onInterestsChanged = { newInterests ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = newInterests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
                         )
                     }
-                }
+                )
 
-                item {
-                    InterestChips(
-                        interests = uiState.partner2Interests,
-                        onInterestsChange = { viewModel.updatePartner2Interests(it) }
-                    )
-                }
+                // Couple Settings Section
+                Text(
+                    text = "Couple Settings",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                )
 
-                // General Settings
-                item {
-                    Text(
-                        text = "General",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                }
+                OutlinedTextField(
+                    value = uiState.city,
+                    onValueChange = { newCity ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = uiState.monthlyBudget,
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = newCity
+                        )
+                    },
+                    label = { Text("City") },
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                item {
-                    OutlinedTextField(
-                        value = uiState.city,
-                        onValueChange = { viewModel.updateCity(it) },
-                        label = { Text("City") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                // Monthly Budget Slider
+                Text(
+                    text = "Monthly Budget: €${uiState.monthlyBudget.roundToInt()}",
+                    style = MaterialTheme.typography.bodyLarge
+                )
 
-                item {
-                    OutlinedTextField(
-                        value = uiState.monthlyBudget.toString(),
-                        onValueChange = { 
-                            it.toDoubleOrNull()?.let { budget ->
-                                viewModel.updateMonthlyBudget(budget)
-                            }
+                Slider(
+                    value = uiState.monthlyBudget.toFloat(),
+                    onValueChange = { newValue ->
+                        viewModel.updateSettings(
+                            partner1Name = uiState.partner1Name,
+                            partner1Color = uiState.partner1Color,
+                            partner1Interests = uiState.partner1Interests,
+                            partner2Name = uiState.partner2Name,
+                            partner2Color = uiState.partner2Color,
+                            partner2Interests = uiState.partner2Interests,
+                            monthlyBudget = newValue.roundToInt().toDouble(),
+                            dateFrequencyWeeks = uiState.dateFrequencyWeeks,
+                            city = uiState.city
+                        )
+                    },
+                    valueRange = 100f..1000f,
+                    steps = 18, // (1000-100)/50 = 18 steps
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Date Frequency Selection
+                Text(
+                    text = "Date Frequency: ${when(uiState.dateFrequencyWeeks) {
+                        1 -> "Once a week"
+                        2 -> "Every 2 weeks"
+                        4 -> "Once a month"
+                        else -> "Every ${uiState.dateFrequencyWeeks} weeks"
+                    }}",
+                    style = MaterialTheme.typography.bodyLarge
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = uiState.dateFrequencyWeeks == 1,
+                        onClick = {
+                            viewModel.updateSettings(
+                                partner1Name = uiState.partner1Name,
+                                partner1Color = uiState.partner1Color,
+                                partner1Interests = uiState.partner1Interests,
+                                partner2Name = uiState.partner2Name,
+                                partner2Color = uiState.partner2Color,
+                                partner2Interests = uiState.partner2Interests,
+                                monthlyBudget = uiState.monthlyBudget,
+                                dateFrequencyWeeks = 1,
+                                city = uiState.city
+                            )
                         },
-                        label = { Text("Monthly Budget") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth()
+                        label = { Text("Weekly") }
+                    )
+
+                    FilterChip(
+                        selected = uiState.dateFrequencyWeeks == 2,
+                        onClick = {
+                            viewModel.updateSettings(
+                                partner1Name = uiState.partner1Name,
+                                partner1Color = uiState.partner1Color,
+                                partner1Interests = uiState.partner1Interests,
+                                partner2Name = uiState.partner2Name,
+                                partner2Color = uiState.partner2Color,
+                                partner2Interests = uiState.partner2Interests,
+                                monthlyBudget = uiState.monthlyBudget,
+                                dateFrequencyWeeks = 2,
+                                city = uiState.city
+                            )
+                        },
+                        label = { Text("Bi-weekly") }
+                    )
+
+                    FilterChip(
+                        selected = uiState.dateFrequencyWeeks == 4,
+                        onClick = {
+                            viewModel.updateSettings(
+                                partner1Name = uiState.partner1Name,
+                                partner1Color = uiState.partner1Color,
+                                partner1Interests = uiState.partner1Interests,
+                                partner2Name = uiState.partner2Name,
+                                partner2Color = uiState.partner2Color,
+                                partner2Interests = uiState.partner2Interests,
+                                monthlyBudget = uiState.monthlyBudget,
+                                dateFrequencyWeeks = 4,
+                                city = uiState.city
+                            )
+                        },
+                        label = { Text("Monthly") }
                     )
                 }
 
-                item {
+                // Save Button
+                if (uiState.hasUnsavedChanges) {
                     Button(
-                        onClick = { 
-                            if (isInitialSetup) {
-                                viewModel.createCouple()
-                            } else {
-                                viewModel.saveSettings()
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                        onClick = { viewModel.saveSettings() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp)
                     ) {
-                        Text(if (isInitialSetup) "Create Profile" else "Save Settings")
+                        Text("Save Changes")
                     }
+                }
+
+                // Account Actions Section
+                Text(
+                    text = "Account Actions",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                )
+
+                Button(
+                    onClick = { viewModel.signOut() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Sign Out")
+                }
+
+                Button(
+                    onClick = { viewModel.deleteUserData() },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Delete User Data")
                 }
             }
         }
-    }
-
-    if (showColorPicker1) {
-        ColorPickerDialog(
-            onDismissRequest = { showColorPicker1 = false },
-            onColorSelected = { color ->
-                viewModel.updatePartner1Color(String.format("#%06X", 0xFFFFFF and color.toArgb()))
-                showColorPicker1 = false
-            }
-        )
-    }
-
-    if (showColorPicker2) {
-        ColorPickerDialog(
-            onDismissRequest = { showColorPicker2 = false },
-            onColorSelected = { color ->
-                viewModel.updatePartner2Color(String.format("#%06X", 0xFFFFFF and color.toArgb()))
-                showColorPicker2 = false
-            }
-        )
-    }
-
-    if (uiState.error != null) {
-        AlertDialog(
-            onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
-            text = { Text(uiState.error!!) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK")
-                }
-            }
-        )
     }
 }

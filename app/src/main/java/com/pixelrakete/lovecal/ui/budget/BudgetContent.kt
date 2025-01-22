@@ -14,7 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import com.pixelrakete.lovecal.ui.components.DonutChart
+import com.pixelrakete.lovecal.R
+import androidx.compose.material3.HorizontalDivider
 
 @Composable
 fun BudgetContent(
@@ -100,7 +101,11 @@ fun BudgetContent(
                 BudgetRow("Total Budget", monthlyBudget, monthlyBudget)
                 BudgetRow("Planned", plannedBudget, monthlyBudget)
                 BudgetRow("Spent", spentBudget, monthlyBudget)
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 8.dp),
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+                )
                 BudgetRow("Remaining", remainingBudget, monthlyBudget, true)
             }
         }

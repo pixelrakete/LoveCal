@@ -1,25 +1,11 @@
 package com.pixelrakete.lovecal.data.repository
 
-import java.time.LocalDateTime
-import android.util.Log
-import android.content.Context
-import android.accounts.AccountManager
-import android.provider.CalendarContract
-
-data class Calendar(
-    val id: Long,
-    val name: String
-)
+import com.pixelrakete.lovecal.data.model.Calendar
+import com.pixelrakete.lovecal.data.model.DatePlan
+import com.google.api.services.calendar.model.Event
 
 interface CalendarRepository {
-    suspend fun createCalendar(name: String): Long
-    suspend fun getCalendars(): List<Calendar>
-    suspend fun addDateToCalendar(
-        title: String,
-        description: String,
-        location: String,
-        startDateTime: LocalDateTime,
-        endDateTime: LocalDateTime,
-        calendarId: Long
-    ): Long
+    suspend fun getCalendars(): List<CalendarListEntry>
+    suspend fun addCalendar(calendar: CalendarListEntry)
+    suspend fun getSharedCalendar(coupleId: String): CalendarListEntry?
 } 

@@ -1,170 +1,415 @@
 package com.pixelrakete.lovecal.ui.plan
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.BackHandler
 import com.pixelrakete.lovecal.R
-import com.pixelrakete.lovecal.ui.components.DatePickerDialog
-import com.pixelrakete.lovecal.ui.components.LoadingScreen
-import com.pixelrakete.lovecal.ui.components.OutlinedTextFieldWithLabel
+import com.pixelrakete.lovecal.data.model.DateSuggestion
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import java.time.Instant
+import java.time.ZoneId
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlanDateScreen(
-    onNavigateBack: () -> Unit,
+    viewModel: PlanDateViewModel = hiltViewModel(),
     dateId: String? = null,
-    viewModel: PlanDateViewModel = hiltViewModel()
+    onNavigateBack: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDatePicker by remember { mutableStateOf(false) }
-    val dateFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm")
+    var showTimePicker by remember { mutableStateOf(false) }
+    var selectedDateTime by remember { mutableStateOf(LocalDateTime.now()) }
 
     LaunchedEffect(dateId) {
-        if (dateId != null) {
-            viewModel.loadDatePlan(dateId)
-        }
+        viewModel.loadDatePlan(dateId)
     }
 
-    if (uiState.isLoading) {
-        LoadingScreen()
-        return
-    }
-
-    if (uiState.success) {
-        LaunchedEffect(Unit) {
+    LaunchedEffect(uiState.isSuccess) {
+        if (uiState.isSuccess) {
+            viewModel.clearSuccess()
             onNavigateBack()
         }
-        return
+    }
+
+    BackHandler {
+        viewModel.resetState()
+        onNavigateBack()
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                Button(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selectedDate = LocalDateTime.ofInstant(
+                            Instant.ofEpochMilli(millis),
+                            ZoneId.systemDefault()
+                        )
+                        showDatePicker = false
+                        showTimePicker = true
+                        selectedDateTime = selectedDate
+                    }
+                }) {
+                    Text("Next")
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                showModeToggle = false,
+                title = { Text("Select Date") }
+            )
+        }
+    }
+
+    if (showTimePicker) {
+        val timePickerState = rememberTimePickerState(
+            initialHour = selectedDateTime.hour,
+            initialMinute = selectedDateTime.minute
+        )
+        TimePickerDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                Button(onClick = {
+                    val dateStr = String.format(
+                        "%02d.%02d.%04d %02d:%02d",
+                        selectedDateTime.dayOfMonth,
+                        selectedDateTime.monthValue,
+                        selectedDateTime.year,
+                        timePickerState.hour,
+                        timePickerState.minute
+                    )
+                    viewModel.updateDateTime(dateStr)
+                    showTimePicker = false
+                }) {
+                    Text("Confirm")
+                }
+            }
+        ) {
+            TimePicker(
+                state = timePickerState,
+                modifier = Modifier.padding(16.dp)
+            )
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.plan_date)) },
+                title = { Text(if (dateId == null) "Plan a Date" else "Edit Date Plan") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            OutlinedTextFieldWithLabel(
-                value = uiState.title,
-                onValueChange = { viewModel.updateTitle(it) },
-                label = stringResource(R.string.title),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextFieldWithLabel(
-                value = uiState.description,
-                onValueChange = { viewModel.updateDescription(it) },
-                label = stringResource(R.string.description),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = false,
-                minLines = 3
-            )
-
-            OutlinedTextFieldWithLabel(
-                value = uiState.location,
-                onValueChange = { viewModel.updateLocation(it) },
-                label = stringResource(R.string.location),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = uiState.startDateTime.format(dateFormatter),
-                    style = MaterialTheme.typography.bodyLarge
+                OutlinedTextField(
+                    value = uiState.title,
+                    onValueChange = { viewModel.updateTitle(it) },
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
                 )
-                IconButton(onClick = { showDatePicker = true }) {
-                    Icon(Icons.Default.DateRange, contentDescription = "Select date")
+
+                OutlinedTextField(
+                    value = uiState.description,
+                    onValueChange = { viewModel.updateDescription(it) },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    enabled = !uiState.isLoading
+                )
+
+                OutlinedTextField(
+                    value = uiState.location,
+                    onValueChange = { viewModel.updateLocation(it) },
+                    label = { Text("Location") },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Date: ${uiState.dateTimeStr}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { showDatePicker = true },
+                        enabled = !uiState.isLoading
+                    ) {
+                        Text("Select Date")
+                    }
+                }
+
+                Text("Budget: €${uiState.budget.toInt()}")
+                Slider(
+                    value = uiState.budget.toFloat(),
+                    onValueChange = { viewModel.updateBudget(it.toDouble()) },
+                    valueRange = 0f..500f,
+                    steps = 50,
+                    enabled = !uiState.isLoading
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Surprise your partner?")
+                    Switch(
+                        checked = uiState.isSurprise,
+                        onCheckedChange = { viewModel.updateIsSurprise(it) },
+                        enabled = !uiState.isLoading
+                    )
+                }
+
+                Button(
+                    onClick = { viewModel.generateAiSuggestion() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                ) {
+                    Text("Get AI Suggestions")
+                }
+
+                Button(
+                    onClick = { viewModel.saveDatePlan() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !uiState.isLoading
+                ) {
+                    Text("Save Date")
+                }
+
+                if (uiState.suggestions.isNotEmpty()) {
+                    Text(
+                        text = "Suggestions",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        uiState.suggestions.forEach { suggestion ->
+                            DateSuggestionCard(
+                                suggestion = suggestion,
+                                onClick = { viewModel.applySuggestion(suggestion) },
+                                enabled = !uiState.isLoading
+                            )
+                        }
+                    }
                 }
             }
 
-            OutlinedTextFieldWithLabel(
-                value = uiState.budget,
-                onValueChange = { viewModel.updateBudget(it) },
-                label = stringResource(R.string.budget),
-                modifier = Modifier.fillMaxWidth(),
-                keyboardType = KeyboardType.Number
-            )
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
+                        .clickable(enabled = false) {},
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
 
+            if (uiState.error != null) {
+                AlertDialog(
+                    onDismissRequest = { viewModel.clearError() },
+                    title = { Text("Error") },
+                    text = { Text(text = uiState.error ?: "") },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.clearError() }) {
+                            Text("OK")
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun DateSuggestionCard(
+    suggestion: DateSuggestion,
+    onClick: () -> Unit,
+    enabled: Boolean
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = suggestion.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = suggestion.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.surprise_date),
-                    style = MaterialTheme.typography.bodyLarge
+                    text = suggestion.location,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
-                Switch(
-                    checked = uiState.isSurprise,
-                    onCheckedChange = { viewModel.updateIsSurprise(it) }
+                Text(
+                    text = "€${suggestion.budget.toInt()}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
-            }
-
-            Button(
-                onClick = { viewModel.getRandomWish() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.get_random_wish))
-            }
-
-            Button(
-                onClick = { viewModel.saveDatePlan() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.save))
             }
         }
+    }
+}
 
-        if (showDatePicker) {
-            DatePickerDialog(
-                onDateTimeSelected = { dateTime ->
-                    viewModel.updateStartDateTime(dateTime)
-                    showDatePicker = false
-                },
-                onDismiss = { showDatePicker = false }
-            )
-        }
-
-        if (uiState.error != null) {
-            AlertDialog(
-                onDismissRequest = { viewModel.clearError() },
-                title = { Text(stringResource(R.string.error)) },
-                text = { Text(uiState.error!!) },
-                confirmButton = {
-                    TextButton(onClick = { viewModel.clearError() }) {
-                        Text(stringResource(R.string.ok))
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun InterestPills(
+    interests: List<String>,
+    onRemove: (String) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        interests.forEach { interest ->
+            AssistChip(
+                onClick = { },
+                label = { Text(interest) },
+                leadingIcon = {
+                    IconButton(
+                        onClick = { onRemove(interest) },
+                        modifier = Modifier.size(18.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove $interest",
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun TimePickerDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .width(IntrinsicSize.Min)
+                .height(IntrinsicSize.Min)
+                .background(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surface
+                )
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                content()
+                Row(
+                    modifier = Modifier
+                        .height(40.dp)
+                        .fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onDismissRequest
+                    ) {
+                        Text("Cancel")
+                    }
+                    confirmButton()
+                }
+            }
         }
     }
 } 

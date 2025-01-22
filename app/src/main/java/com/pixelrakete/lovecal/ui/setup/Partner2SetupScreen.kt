@@ -11,79 +11,68 @@ import androidx.hilt.navigation.compose.hiltViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Partner2SetupScreen(
-    invitationCode: String,
     onNavigateToHome: () -> Unit,
-    viewModel: Partner2SetupViewModel = hiltViewModel()
+    onNavigateBack: () -> Unit
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     var name by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf("#2196F3") }
+    var color by remember { mutableStateOf("#FF0000") }
     var interests by remember { mutableStateOf("") }
-
-    LaunchedEffect(uiState.success) {
-        if (uiState.success) {
-            onNavigateToHome()
-        }
-    }
+    var error by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.Center
     ) {
-        Text(
-            text = "Complete Your Profile",
-            style = MaterialTheme.typography.headlineMedium
-        )
-
         OutlinedTextField(
             value = name,
             onValueChange = { name = it },
-            label = { Text("Your Name") },
+            label = { Text("Name") },
             modifier = Modifier.fillMaxWidth()
         )
 
-        OutlinedTextField(
-            value = color,
-            onValueChange = { color = it },
-            label = { Text("Your Color (Hex)") },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = interests,
             onValueChange = { interests = it },
-            label = { Text("Your Interests (comma separated)") },
-            modifier = Modifier.fillMaxWidth()
+            label = { Text("Interests") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 3
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
-                viewModel.completeSetup(
-                    invitationCode = invitationCode,
-                    name = name,
-                    color = color,
-                    interests = interests.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                )
+                if (name.isBlank()) {
+                    error = "Please enter your name"
+                } else {
+                    error = null
+                    onNavigateToHome()
+                }
             },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = name.isNotBlank() && color.isNotBlank() && !uiState.isLoading
+            modifier = Modifier.fillMaxWidth()
         ) {
             Text("Complete Setup")
         }
 
-        if (uiState.error != null) {
+        if (error != null) {
             Text(
-                text = uiState.error!!,
+                text = error!!,
                 color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp)
             )
         }
 
-        if (uiState.isLoading) {
-            CircularProgressIndicator()
+        TextButton(
+            onClick = onNavigateBack,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Back")
         }
     }
 } 

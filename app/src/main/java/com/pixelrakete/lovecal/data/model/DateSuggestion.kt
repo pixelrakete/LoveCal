@@ -1,8 +1,8 @@
 package com.pixelrakete.lovecal.data.model
 
 data class DateSuggestion(
-    val title: String = "",
-    val description: String = "",
-    val location: String = "",
-    val budget: Double = 0.0
+    val title: String,
+    val location: String,
+    val description: String,
+    val budget: Double
 ) 

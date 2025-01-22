@@ -1,83 +1,124 @@
 package com.pixelrakete.lovecal.data.repository
 
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.pixelrakete.lovecal.data.manager.UserManager
 import com.pixelrakete.lovecal.data.model.DatePlan
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import java.time.LocalDateTime
-import java.time.ZoneOffset
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class DatePlanRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore,
-    private val auth: FirebaseAuth,
-    private val coupleRepository: CoupleRepository
+    private val userManager: UserManager
 ) : DatePlanRepository {
-
-    override suspend fun getDatePlans(): List<DatePlan> {
-        val couple = coupleRepository.getCurrentCouple() ?: return emptyList()
-        
-        return firestore.collection("dates")
-            .whereEqualTo("coupleId", couple.id)
-            .orderBy("startDateTime", Query.Direction.ASCENDING)
-            .get()
-            .await()
-            .documents
-            .mapNotNull { doc ->
-                doc.toObject(DatePlan::class.java)?.copy(id = doc.id)
-            }
-    }
-
-    override suspend fun getDatePlan(id: String): DatePlan? {
-        return firestore.collection("dates")
-            .document(id)
-            .get()
-            .await()
-            .toObject(DatePlan::class.java)
-            ?.copy(id = id)
-    }
 
     override suspend fun createDatePlan(
         title: String,
-        description: String,
-        location: String,
-        startDateTime: LocalDateTime,
-        budget: Double,
+        description: String?,
+        location: String?,
+        budget: Double?,
+        dateTimeStr: String?,
         isSurprise: Boolean
-    ): String {
-        val couple = coupleRepository.getCurrentCouple() ?: throw IllegalStateException("No couple found")
-        val currentUserId = auth.currentUser?.uid ?: throw IllegalStateException("User not authenticated")
+    ): DatePlan {
+        val userId = userManager.getCurrentUserId() ?: throw IllegalStateException("User not logged in")
+        val coupleId = userManager.getCoupleId() ?: throw IllegalStateException("User not in a couple")
         
         val datePlan = DatePlan(
             title = title,
             description = description,
             location = location,
-            startDateTime = startDateTime,
             budget = budget,
-            isSurprise = isSurprise,
-            coupleId = couple.id,
-            plannerId = currentUserId,
-            createdAt = LocalDateTime.now()
+            dateTimeStr = dateTimeStr,
+            createdBy = userId,
+            coupleId = coupleId,
+            isSurprise = isSurprise
         )
         
-        return firestore.collection("dates")
-            .add(datePlan)
-            .await()
-            .id
+        val doc = firestore.collection("date_plans").document()
+        val datePlanWithId = datePlan.copy(id = doc.id)
+        doc.set(datePlanWithId).await()
+        
+        return datePlanWithId
     }
 
-    override suspend fun updateDatePlan(datePlan: DatePlan) {
-        firestore.collection("dates")
-            .document(datePlan.id!!)
-            .set(datePlan)
-            .await()
+    override fun getDatePlans(): Flow<List<DatePlan>> = callbackFlow {
+        val coupleId = userManager.getCoupleId() ?: throw IllegalStateException("User not in a couple")
+        
+        val registration = firestore.collection("date_plans")
+            .whereEqualTo("coupleId", coupleId)
+            .orderBy("dateTimeStr", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                val datePlans = snapshot?.documents?.map { doc ->
+                    DatePlan.fromFirestore(doc.data?.plus(mapOf("id" to doc.id)) ?: emptyMap())
+                } ?: emptyList()
+                
+                trySend(datePlans)
+            }
+        
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun getDatePlan(id: String): DatePlan? {
+        val doc = firestore.collection("date_plans").document(id).get().await()
+        return if (doc.exists()) {
+            DatePlan.fromFirestore(doc.data?.plus(mapOf("id" to doc.id)) ?: emptyMap())
+        } else {
+            null
+        }
     }
 
     override suspend fun deleteDatePlan(id: String) {
-        firestore.collection("dates")
+        firestore.collection("date_plans").document(id).delete().await()
+    }
+
+    override suspend fun markDatePlanAsCompleted(id: String) {
+        firestore.collection("date_plans").document(id)
+            .update("completed", true)
+            .await()
+    }
+
+    override suspend fun updateDatePlan(
+        id: String,
+        title: String,
+        description: String?,
+        location: String?,
+        budget: Double?,
+        dateTimeStr: String?,
+        isSurprise: Boolean
+    ): DatePlan {
+        val userId = userManager.getCurrentUserId() ?: throw IllegalStateException("User not logged in")
+        val coupleId = userManager.getCoupleId() ?: throw IllegalStateException("User not in a couple")
+        
+        val datePlan = DatePlan(
+            id = id,
+            title = title,
+            description = description,
+            location = location,
+            budget = budget,
+            dateTimeStr = dateTimeStr,
+            createdBy = userId,
+            coupleId = coupleId,
+            isSurprise = isSurprise
+        )
+        
+        firestore.collection("date_plans").document(id).set(datePlan).await()
+        return datePlan
+    }
+
+    override suspend fun updateDatePlanCompleted(id: String, completed: Boolean) {
+        firestore.collection("date_plans")
             .document(id)
-            .delete()
+            .update("completed", completed)
             .await()
     }
 } 
