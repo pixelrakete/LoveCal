@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">LoveCal</string>
+    <string name="plan_date">Plan a Date</string>
+    <string name="title">Title</string>
+    <string name="description">Description</string>
+    <string name="location">Location</string>
+    <string name="budget">Budget</string>
+    <string name="surprise_date">Make it a surprise date</string>
+    <string name="get_random_wish">Get Random Wish from Partner</string>
+    <string name="save">Save</string>
+    <string name="error">Error</string>
+    <string name="ok">OK</string>
+</resources>

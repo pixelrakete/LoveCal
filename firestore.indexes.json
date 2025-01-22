@@ -1,0 +1,19 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "dates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "coupleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startDateTime",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
